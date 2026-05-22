@@ -1,0 +1,22 @@
+[
+  {
+    "chapter": 1,
+    "words": [
+      { "word": "persistent", "meanings": ["지속적인", "고집 센"], "note": "동사 persist에서 파생됨" },
+      { "word": "vivid", "meanings": ["생생한", "선명한"], "note": "색채나 묘사가 뚜렷할 때 주로 사용" },
+      { "word": "mitigate", "meanings": ["완화시키다", "경감하다"], "note": "주로 고통, 위험 등을 줄일 때 쓰임" },
+      { "word": "ambiguous", "meanings": ["애매모호한", "두 가지 이상의 의미로 풀이되는"], "note": "명확하지 않은 상황을 묘사" },
+      { "word": "meticulous", "meanings": ["꼼꼼한", "세심한"], "note": "매우 작은 것까지 신경 쓰는 긍정/부정적 의미 모두 가능" }
+    ]
+  },
+  {
+    "chapter": 2,
+    "words": [
+      { "word": "abandon", "meanings": ["버리다", "포기하다"], "note": "책임이나 계획을 그만두는 것" },
+      { "word": "consensus", "meanings": ["합의", "의견 일치"], "note": "그룹 내 다수의 동의" },
+      { "word": "diligent", "meanings": ["부지런한", "근면한"], "note": "노력하는 태도 강조" },
+      { "word": "eloquent", "meanings": ["유창한", "설득력 있는"], "note": "말을 잘하는 상태" },
+      { "word": "fragile", "meanings": ["취약한", "깨지기 쉬운"], "note": "물건뿐 아니라 상황에도 쓰임" }
+    ]
+  }
+]
