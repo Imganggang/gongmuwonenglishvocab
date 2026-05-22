@@ -3,425 +3,356 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Vocab Master</title>
+    <title>공시용 영단어장</title>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Pretendard:wght@400;600;700&display=swap');
-        
-        body {
-            font-family: 'Pretendard', sans-serif;
-            background-color: #f8fafc;
-            color: #1e293b;
-            overflow-x: hidden;
-        }
-
-        .chart-container {
-            position: relative;
-            width: 100%;
-            max-width: 450px;
-            margin-left: auto;
-            margin-right: auto;
-            height: 300px;
-            max-height: 350px;
-        }
-
-        .fade-in {
-            animation: fadeIn 0.3s ease-in-out;
-        }
-
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(10px); }
             to { opacity: 1; transform: translateY(0); }
         }
-
-        .custom-scrollbar::-webkit-scrollbar {
-            width: 6px;
-        }
-        .custom-scrollbar::-webkit-scrollbar-track {
-            background: #f1f1f1;
-        }
-        .custom-scrollbar::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 10px;
+        .animate-fade-in {
+            animation: fadeIn 0.3s ease-out forwards;
         }
     </style>
 </head>
-<body class="min-h-screen">
-
-    <header class="bg-white border-b border-slate-200 sticky top-0 z-50">
-        <div class="max-w-4xl mx-auto px-4">
-            <div class="flex items-center justify-between h-16">
-                <div class="flex items-center gap-2">
-                    <div class="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white font-bold">V</div>
-                    <h1 class="text-xl font-bold tracking-tight text-slate-800">VocabMaster</h1>
-                </div>
-                <nav class="flex gap-1">
-                    <button id="tab-list-btn" onclick="switchTab('list')" class="px-4 py-2 rounded-md font-semibold transition-all duration-200 bg-blue-50 text-blue-600">리스트 탭</button>
-                    <button id="tab-test-btn" onclick="switchTab('test')" class="px-4 py-2 rounded-md font-semibold transition-all duration-200 text-slate-500 hover:bg-slate-100">테스트 탭</button>
-                </nav>
-            </div>
-        </div>
-    </header>
-
-    <main id="main-content" class="max-w-4xl mx-auto px-4 py-8">
-        <!-- 동적 콘텐츠 삽입 영역 -->
-    </main>
+<body class="bg-gray-100 text-gray-800">
+    <!-- 앱 렌더링 컨테이너 -->
+    <div id="app" class="min-h-screen pb-10"></div>
 
     <script>
-        // 1. 데이터 정의 (외부 JSON에서 로드)
-        let VOCAB_DATA = [];
-
-        async function loadVocabData() {
-            try {
-                // vocab_data.json 파일을 비동기적으로 불러옵니다.
-                const response = await fetch('vocab_data.json');
-                if (!response.ok) throw new Error('데이터를 불러오는데 실패했습니다.');
-                
-                VOCAB_DATA = await response.json();
-                render(); // 데이터 로드가 완료된 후 화면을 그립니다.
-            } catch (error) {
-                console.error("오류 발생:", error);
-                document.getElementById('main-content').innerHTML = 
-                    '<p class="text-center text-red-500 mt-10 font-bold">데이터를 불러오는데 실패했습니다. (로컬 파일 직접 실행 시 CORS 정책으로 인해 발생할 수 있습니다)</p>';
-            }
-        }
-
-        // 2. 상태 관리
-        let currentState = {
+        // 1. 상태 관리 (State)
+        let vocabData = [];
+        let scores = JSON.parse(localStorage.getItem('vocabScores') || '{}');
+        
+        let state = {
             activeTab: 'list', // 'list' | 'test'
-            view: 'menu', // 'menu' | 'detail' | 'testing' | 'result'
+            viewState: 'menu', // 'menu' | 'studying' | 'testing' | 'testResult'
             selectedChapter: null,
-            scores: JSON.parse(localStorage.getItem('vocab_scores') || '{}'),
             test: {
                 questions: [],
                 currentIndex: 0,
-                correctCount: 0,
+                score: 0,
                 isAnswered: false,
-                lastAnswerCorrect: false
+                isWrong: false,
+                inputValue: ''
             }
         };
 
-        // 3. 유틸리티 함수
-        function speak(text) {
-            if (!window.speechSynthesis) return alert("발음을 지원하지 않는 브라우저입니다.");
-            window.speechSynthesis.cancel();
-            const utter = new SpeechSynthesisUtterance(text);
-            utter.lang = 'en-US';
-            utter.rate = 0.9;
-            window.speechSynthesis.speak(utter);
+        // 2. 초기 데이터 로드 (vocab_data.json)
+        async function init() {
+            try {
+                renderLoading();
+                const response = await fetch('vocab_data.json');
+                if (!response.ok) throw new Error('데이터 로드 실패');
+                vocabData = await response.json();
+                render();
+            } catch (error) {
+                console.error(error);
+                document.getElementById('app').innerHTML = `
+                    <div class="text-center py-20 text-red-500 font-bold">
+                        데이터를 불러오는데 실패했습니다.<br>
+                        (로컬에서 직접 실행 시 브라우저 보안 정책(CORS)으로 인해 차단될 수 있습니다. 로컬 서버나 Vercel을 이용해주세요.)
+                    </div>
+                `;
+            }
         }
 
-        function shuffle(array) {
-            return array.sort(() => Math.random() - 0.5);
-        }
+        // 3. 발음 듣기 기능 (TTS)
+        window.speak = function(word) {
+            if ('speechSynthesis' in window) {
+                const utterance = new SpeechSynthesisUtterance(word);
+                utterance.lang = 'en-US';
+                window.speechSynthesis.speak(utterance);
+            } else {
+                alert('이 브라우저는 음성 합성을 지원하지 않습니다.');
+            }
+        };
 
-        function switchTab(tab) {
-            currentState.activeTab = tab;
-            currentState.view = 'menu';
-            currentState.selectedChapter = null;
+        // 4. 이벤트 핸들러
+        window.changeTab = function(tab) {
+            state.activeTab = tab;
+            state.viewState = 'menu';
+            state.selectedChapter = null;
             render();
-        }
+        };
 
-        // 4. 렌더링 엔진
-        function render() {
-            const container = document.getElementById('main-content');
-            container.innerHTML = '';
-            
-            // 버튼 스타일 업데이트
-            document.getElementById('tab-list-btn').className = currentState.activeTab === 'list' ? 'px-4 py-2 rounded-md font-semibold bg-blue-50 text-blue-600' : 'px-4 py-2 rounded-md font-semibold text-slate-500 hover:bg-slate-100';
-            document.getElementById('tab-test-btn').className = currentState.activeTab === 'test' ? 'px-4 py-2 rounded-md font-semibold bg-blue-50 text-blue-600' : 'px-4 py-2 rounded-md font-semibold text-slate-500 hover:bg-slate-100';
-
-            if (currentState.view === 'menu') {
-                renderMenu(container);
-            } else if (currentState.view === 'detail') {
-                renderDetail(container);
-            } else if (currentState.view === 'testing') {
-                renderTesting(container);
-            } else if (currentState.view === 'result') {
-                renderResult(container);
-            }
-        }
-
-        // --- 뷰 렌더러 함수들 ---
-
-        function renderMenu(container) {
-            const sectionHeader = document.createElement('div');
-            sectionHeader.className = 'mb-8';
-            sectionHeader.innerHTML = `
-                <h2 class="text-2xl font-bold text-slate-900 mb-2">${currentState.activeTab === 'list' ? '학습 리스트' : '테스트 센터'}</h2>
-                <p class="text-slate-500">원하는 회차를 선택하여 ${currentState.activeTab === 'list' ? '단어를 암기해보세요.' : '실력을 점검해보세요.'}</p>
-            `;
-            container.appendChild(sectionHeader);
-
-            const grid = document.createElement('div');
-            grid.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
-            
-            VOCAB_DATA.forEach(item => {
-                const card = document.createElement('button');
-                card.className = 'flex items-center justify-between p-5 bg-white border border-slate-200 rounded-xl hover:border-blue-400 hover:shadow-lg transition-all group text-left';
-                
-                const scoreInfo = currentState.scores[item.chapter];
-                const infoText = (currentState.activeTab === 'test' && scoreInfo !== undefined) 
-                    ? `<span class="text-blue-600 font-bold">${scoreInfo}</span><span class="text-slate-400"> / ${item.words.length}개</span>`
-                    : `<span class="text-slate-600">${item.words.length}개 단어</span>`;
-
-                card.innerHTML = `
-                    <div class="flex flex-col">
-                        <span class="text-sm font-semibold text-blue-500 mb-1">CHAPTER ${item.chapter}</span>
-                        <span class="text-lg font-bold text-slate-800">${item.chapter}회 단어장</span>
-                    </div>
-                    <div class="bg-slate-50 px-3 py-2 rounded-lg group-hover:bg-blue-50 transition-colors">
-                        ${infoText}
-                    </div>
-                `;
-                card.onclick = () => selectChapter(item);
-                grid.appendChild(card);
-            });
-            container.appendChild(grid);
-        }
-
-        function renderDetail(container) {
-            const chapter = currentState.selectedChapter;
-            const header = document.createElement('div');
-            header.className = 'flex items-center justify-between mb-8';
-            header.innerHTML = `
-                <div>
-                    <h2 class="text-2xl font-bold text-slate-900">${chapter.chapter}회 학습 리스트</h2>
-                    <p class="text-slate-500">단어를 클릭하면 정확한 발음을 들을 수 있습니다.</p>
-                </div>
-                <button onclick="goBack()" class="px-4 py-2 text-sm font-semibold bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300">나가기</button>
-            `;
-            container.appendChild(header);
-
-            const list = document.createElement('div');
-            list.className = 'space-y-4';
-            chapter.words.forEach(item => {
-                const itemEl = document.createElement('div');
-                itemEl.className = 'bg-white border border-slate-100 p-5 rounded-xl shadow-sm fade-in';
-                itemEl.innerHTML = `
-                    <div class="flex items-start justify-between mb-2">
-                        <h3 onclick="speak('${item.word}')" class="text-xl font-bold text-blue-600 cursor-pointer hover:underline flex items-center gap-2">
-                            ${item.word} 
-                            <span class="text-sm">🔊</span>
-                        </h3>
-                    </div>
-                    <p class="text-slate-800 font-medium text-lg mb-2">${item.meanings.join(', ')}</p>
-                    ${item.note ? `<p class="text-sm text-slate-500 bg-slate-50 p-2 rounded-md inline-block">💡 ${item.note}</p>` : ''}
-                `;
-                list.appendChild(itemEl);
-            });
-            container.appendChild(list);
-        }
-
-        function renderTesting(container) {
-            const q = currentState.test.questions[currentState.test.currentIndex];
-            const isWordQuestion = q.type === 'word';
-            
-            const header = document.createElement('div');
-            header.className = 'flex items-center justify-between mb-10';
-            header.innerHTML = `
-                <div class="bg-blue-100 px-4 py-1 rounded-full text-blue-700 font-bold text-sm">
-                    QUESTION ${currentState.test.currentIndex + 1} / ${currentState.test.questions.length}
-                </div>
-                <button onclick="goBack()" class="text-slate-400 hover:text-slate-600 underline text-sm">테스트 종료</button>
-            `;
-            container.appendChild(header);
-
-            const card = document.createElement('div');
-            card.className = 'bg-white rounded-3xl shadow-xl p-8 md:p-12 text-center border border-slate-100 relative fade-in';
-            
-            if (!currentState.test.isAnswered) {
-                // 문제 풀이 UI
-                const prompt = isWordQuestion ? '다음 단어의 뜻은?' : '다음 뜻을 가진 영어 단어는?';
-                const subject = isWordQuestion ? q.data.word : q.data.meanings.join(', ');
-                
-                card.innerHTML = `
-                    <p class="text-blue-500 font-semibold mb-4 uppercase tracking-widest text-xs">${prompt}</p>
-                    <h3 id="test-subject" class="text-3xl md:text-5xl font-black text-slate-800 mb-10 cursor-pointer hover:text-blue-600 transition-colors">
-                        ${subject} ${isWordQuestion ? '🔊' : ''}
-                    </h3>
-                    <form onsubmit="handleTestSubmit(event)" class="max-w-xs mx-auto">
-                        <input type="text" id="test-input" autofocus autocomplete="off" class="w-full border-b-4 border-slate-200 focus:border-blue-500 outline-none text-2xl py-2 text-center transition-all mb-6" placeholder="정답을 입력하세요">
-                        <button type="submit" class="w-full bg-slate-800 text-white py-4 rounded-xl font-bold hover:bg-slate-900 transition-all shadow-lg">제출하기</button>
-                    </form>
-                `;
-                if (isWordQuestion) {
-                    card.querySelector('#test-subject').onclick = () => speak(q.data.word);
-                }
+        window.selectChapter = function(chapterIndex) {
+            state.selectedChapter = vocabData[chapterIndex];
+            if (state.activeTab === 'list') {
+                state.viewState = 'studying';
             } else {
-                // 결과 피드백 UI
-                const isCorrect = currentState.test.lastAnswerCorrect;
-                card.innerHTML = `
-                    <div class="mb-6">
-                        <div class="w-20 h-20 ${isCorrect ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'} rounded-full flex items-center justify-center mx-auto mb-4 text-4xl">
-                            ${isCorrect ? '✓' : '✕'}
-                        </div>
-                        <h4 class="text-2xl font-bold ${isCorrect ? 'text-green-600' : 'text-red-600'} mb-2">${isCorrect ? '정답입니다!' : '아쉽네요!'}</h4>
-                    </div>
-                    
-                    <div class="bg-slate-50 rounded-2xl p-6 text-left mb-8 border border-slate-100">
-                        <p class="text-slate-400 text-xs font-bold mb-1 uppercase">정답 정보</p>
-                        <h3 onclick="speak('${q.data.word}')" class="text-2xl font-bold text-slate-800 mb-1 cursor-pointer hover:text-blue-600">${q.data.word} 🔊</h3>
-                        <p class="text-lg text-slate-700 mb-3">${q.data.meanings.join(', ')}</p>
-                        ${q.data.note ? `<p class="text-sm text-slate-500 pt-3 border-t border-slate-200">💡 ${q.data.note}</p>` : ''}
-                    </div>
-
-                    <button onclick="nextQuestion()" autofocus class="w-full bg-blue-600 text-white py-4 rounded-xl font-bold hover:bg-blue-700 transition-all shadow-lg">
-                        ${currentState.test.currentIndex + 1 === currentState.test.questions.length ? '최종 결과 보기' : '다음 문제'}
-                    </button>
-                `;
-            }
-            container.appendChild(card);
-            
-            const input = document.getElementById('test-input');
-            if (input) input.focus();
-        }
-
-        function renderResult(container) {
-            const total = currentState.test.questions.length;
-            const score = currentState.test.correctCount;
-            const percent = Math.round((score / total) * 100);
-
-            const header = document.createElement('div');
-            header.className = 'text-center mb-10';
-            header.innerHTML = `
-                <h2 class="text-3xl font-black text-slate-900 mb-2">테스트 종료</h2>
-                <p class="text-slate-500">${currentState.selectedChapter.chapter}회차 결과를 확인하세요.</p>
-            `;
-            container.appendChild(header);
-
-            const resultCard = document.createElement('div');
-            resultCard.className = 'bg-white rounded-3xl shadow-xl p-8 border border-slate-100 text-center mb-8 fade-in';
-            
-            const chartDiv = document.createElement('div');
-            chartDiv.className = 'chart-container mb-6';
-            chartDiv.innerHTML = `<canvas id="resultChart"></canvas>`;
-            resultCard.appendChild(chartDiv);
-
-            resultCard.innerHTML += `
-                <div class="flex justify-center gap-8 mb-8">
-                    <div class="text-center">
-                        <p class="text-slate-400 text-sm font-semibold uppercase">맞힌 개수</p>
-                        <p class="text-3xl font-bold text-blue-600">${score} / ${total}</p>
-                    </div>
-                    <div class="text-center border-l border-slate-200 pl-8">
-                        <p class="text-slate-400 text-sm font-semibold uppercase">정답률</p>
-                        <p class="text-3xl font-bold text-slate-800">${percent}%</p>
-                    </div>
-                </div>
-                <button onclick="goBack()" class="w-full py-4 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-900 transition-colors shadow-lg">나가기</button>
-            `;
-            container.appendChild(resultCard);
-
-            // Chart.js 초기화 (Canvas 기반)
-            setTimeout(() => {
-                const ctx = document.getElementById('resultChart').getContext('2d');
-                new Chart(ctx, {
-                    type: 'doughnut',
-                    data: {
-                        labels: ['정답', '오답'],
-                        datasets: [{
-                            data: [score, total - score],
-                            backgroundColor: ['#2563eb', '#f1f5f9'],
-                            borderWidth: 0,
-                            hoverOffset: 4
-                        }]
-                    },
-                    options: {
-                        maintainAspectRatio: false,
-                        cutout: '70%',
-                        plugins: {
-                            legend: { display: false }
-                        }
-                    }
-                });
-            }, 10);
-        }
-
-        // --- 로직 제어 함수들 ---
-
-        function selectChapter(chapter) {
-            currentState.selectedChapter = chapter;
-            if (currentState.activeTab === 'list') {
-                currentState.view = 'detail';
-            } else {
-                startTest(chapter);
+                startTest(state.selectedChapter);
             }
             render();
+        };
+
+        window.goBackToMenu = function() {
+            state.viewState = 'menu';
+            state.selectedChapter = null;
+            render();
+        };
+
+        // 배열 섞기 유틸리티
+        function shuffleArray(array) {
+            const newArr = [...array];
+            for (let i = newArr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
+            }
+            return newArr;
         }
 
-        function startTest(chapter) {
-            // 문제 생성: 각 단어별로 영->한 또는 한->영 무작위 결정
-            const rawQuestions = chapter.words.map(w => ({
-                type: Math.random() > 0.5 ? 'word' : 'meaning',
-                data: w
+        function startTest(chapterData) {
+            const randomizedWords = shuffleArray(chapterData.words);
+            const questions = randomizedWords.map(wordObj => ({
+                ...wordObj,
+                askType: Math.random() > 0.5 ? 'ask_meaning' : 'ask_word'
             }));
-            
-            currentState.test = {
-                questions: shuffle(rawQuestions),
+
+            state.test = {
+                questions: questions,
                 currentIndex: 0,
-                correctCount: 0,
+                score: 0,
                 isAnswered: false,
-                lastAnswerCorrect: false
+                isWrong: false,
+                inputValue: ''
             };
-            currentState.view = 'testing';
+            state.viewState = 'testing';
         }
 
-        function handleTestSubmit(e) {
-            e.preventDefault();
-            const input = document.getElementById('test-input').value.trim().toLowerCase();
-            if (!input) return;
+        // 💡 [요청하신 정규화 함수 추가] - 조사 및 공백 예외 처리
+        function normalizeText(text) {
+            return text
+                .trim()
+                .toLowerCase()
+                .replace(/~\s*를/g, "~을") // '~를' 또는 '~ 를'을 모두 '~을'로 변환
+                .replace(/~\s*은/g, "~은") // '~는'을 '~은'으로 변환 (필요 시)
+                .replace(/~\s*는/g, "~은")
+                .replace(/~\s*와/g, "~과") // '~와'를 '~과'로 변환 (필요 시)
+                .replace(/~\s*과/g, "~과");
+        }
 
-            const q = currentState.test.questions[currentState.test.currentIndex];
+        window.submitAnswer = function(event) {
+            event.preventDefault();
+            const inputEl = document.getElementById('answerInput');
+            const inputValue = inputEl.value;
+            if (!inputValue.trim()) return;
+
+            const currentQ = state.test.questions[state.test.currentIndex];
+            const cleanInput = normalizeText(inputValue);
             let isCorrect = false;
 
-            if (q.type === 'word') {
-                // 단어를 보고 뜻 중 하나를 맞히는 경우
-                isCorrect = q.data.meanings.some(m => m.trim().toLowerCase() === input);
+            // 정답 비교 로직
+            if (currentQ.askType === 'ask_meaning') {
+                // 뜻 맞추기: 여러 뜻 중 하나라도 일치하면 정답 (데이터도 정규화 후 비교)
+                isCorrect = currentQ.meanings.some(
+                    meaning => normalizeText(meaning) === cleanInput
+                );
             } else {
-                // 뜻을 보고 단어를 맞히는 경우
-                isCorrect = q.data.word.trim().toLowerCase() === input;
+                // 단어 맞추기
+                isCorrect = normalizeText(currentQ.word) === cleanInput;
             }
 
-            currentState.test.isAnswered = true;
-            currentState.test.lastAnswerCorrect = isCorrect;
-            if (isCorrect) currentState.test.correctCount++;
-            
+            if (isCorrect) {
+                state.test.isAnswered = true;
+                state.test.isWrong = false;
+                state.test.score += 1;
+            } else {
+                state.test.isWrong = true;
+                inputEl.value = ''; // 오답 시 비우기
+                setTimeout(() => inputEl.focus(), 10);
+            }
             render();
-        }
+        };
 
-        function nextQuestion() {
-            if (currentState.test.currentIndex + 1 < currentState.test.questions.length) {
-                currentState.test.currentIndex++;
-                currentState.test.isAnswered = false;
+        window.nextQuestion = function() {
+            if (state.test.currentIndex + 1 < state.test.questions.length) {
+                state.test.currentIndex += 1;
+                state.test.isAnswered = false;
+                state.test.isWrong = false;
                 render();
             } else {
-                // 모든 문제 종료
-                completeTest();
+                // 테스트 종료 및 점수 저장
+                scores[state.selectedChapter.chapter] = state.test.score;
+                localStorage.setItem('vocabScores', JSON.stringify(scores));
+                state.viewState = 'testResult';
+                render();
+            }
+        };
+
+        // 5. 렌더링 로직 (화면 그리기)
+        function renderLoading() {
+            document.getElementById('app').innerHTML = `
+                <div class="flex items-center justify-center h-screen text-xl font-bold text-gray-500 animate-pulse">
+                    데이터를 불러오는 중입니다...
+                </div>
+            `;
+        }
+
+        function render() {
+            const app = document.getElementById('app');
+            let html = `
+                <!-- 헤더 및 탭 네비게이션 -->
+                <div class="bg-white shadow-sm mb-6 sticky top-0 z-10">
+                    <div class="max-w-2xl mx-auto">
+                        <h1 class="text-2xl font-bold text-center py-4 text-blue-600">나만의 영단어장</h1>
+                        <div class="flex border-t">
+                            <button onclick="changeTab('list')" class="flex-1 py-3 text-center font-semibold transition-colors ${state.activeTab === 'list' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}">
+                                리스트 탭
+                            </button>
+                            <button onclick="changeTab('test')" class="flex-1 py-3 text-center font-semibold transition-colors ${state.activeTab === 'test' ? 'bg-blue-50 text-blue-600 border-b-2 border-blue-600' : 'text-gray-500 hover:bg-gray-50'}">
+                                테스트 탭
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                <div class="max-w-2xl mx-auto px-4">
+            `;
+
+            // === 메뉴 화면 ===
+            if (state.viewState === 'menu') {
+                html += `<h2 class="text-xl font-bold mb-4">${state.activeTab === 'list' ? '학습할 회차를 선택하세요' : '테스트할 회차를 선택하세요'}</h2>`;
+                html += `<div class="grid gap-3">`;
+                
+                vocabData.forEach((data, index) => {
+                    const totalWords = data.words.length;
+                    const bestScore = scores[data.chapter];
+                    let badgeText = state.activeTab === 'list' ? `${totalWords}개` : (bestScore !== undefined ? `${bestScore}개 / ${totalWords}개` : `${totalWords}개`);
+                    
+                    html += `
+                        <button onclick="selectChapter(${index})" class="flex items-center justify-between p-4 bg-white border border-gray-200 rounded-lg shadow-sm hover:shadow-md hover:border-blue-400 transition-all text-left group">
+                            <span class="text-lg font-bold text-gray-800 group-hover:text-blue-600 transition-colors">${data.chapter}회</span>
+                            <span class="text-sm font-medium text-gray-500 bg-gray-100 px-3 py-1 rounded-full">${badgeText}</span>
+                        </button>
+                    `;
+                });
+                html += `</div>`;
+            }
+
+            // === 단어 학습 화면 ===
+            if (state.viewState === 'studying' && state.selectedChapter) {
+                html += `
+                    <div class="animate-fade-in">
+                        <div class="flex items-center justify-between mb-6">
+                            <h2 class="text-2xl font-bold">${state.selectedChapter.chapter}회 단어 리스트</h2>
+                            <button onclick="goBackToMenu()" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300">나가기</button>
+                        </div>
+                        <div class="space-y-4">
+                `;
+                
+                state.selectedChapter.words.forEach(wordObj => {
+                    // note(설명)가 있는 경우 표시할 HTML
+                    const noteHtml = wordObj.note ? `<p class="text-sm text-gray-500 bg-gray-50 p-2 rounded mt-2">💡 ${wordObj.note}</p>` : '';
+                    
+                    html += `
+                        <div class="bg-white p-5 rounded-lg shadow-sm border border-gray-100">
+                            <div class="flex items-center gap-3 mb-2">
+                                <span class="text-2xl font-bold text-blue-600 cursor-pointer hover:text-blue-800" onclick="speak('${wordObj.word}')" title="발음 듣기">${wordObj.word} 🔊</span>
+                            </div>
+                            <p class="text-lg text-gray-800">${wordObj.meanings.join(', ')}</p>
+                            ${noteHtml}
+                        </div>
+                    `;
+                });
+                
+                html += `</div></div>`;
+            }
+
+            // === 테스트 진행 화면 ===
+            if (state.viewState === 'testing') {
+                const currentQ = state.test.questions[state.test.currentIndex];
+                const totalQ = state.test.questions.length;
+                
+                html += `
+                    <div class="max-w-md mx-auto mt-10">
+                        <div class="flex items-center justify-between mb-6">
+                            <span class="text-gray-500 font-medium">문제 ${state.test.currentIndex + 1} / ${totalQ}</span>
+                            <button onclick="goBackToMenu()" class="text-sm text-gray-500 hover:text-gray-800 underline">테스트 중단</button>
+                        </div>
+                        <div class="bg-white p-8 rounded-xl shadow-md border border-gray-100 text-center relative overflow-hidden min-h-[350px]">
+                `;
+
+                if (!state.test.isAnswered) {
+                    // 문제 풀기 상태
+                    const questionText = currentQ.askType === 'ask_meaning' 
+                        ? `<h3 class="text-4xl font-bold cursor-pointer hover:text-blue-600" onclick="speak('${currentQ.word}')">${currentQ.word} 🔊</h3>`
+                        : `<h3 class="text-2xl font-bold text-gray-800 break-keep">${currentQ.meanings.join(', ')}</h3>`;
+                    
+                    const instruction = currentQ.askType === 'ask_meaning' ? '다음 단어의 뜻을 입력하세요' : '다음 뜻을 가진 단어를 입력하세요';
+
+                    html += `
+                        <form onsubmit="submitAnswer(event)" class="space-y-6 flex flex-col h-full justify-between">
+                            <div class="flex flex-col items-center justify-center flex-grow pt-4">
+                                <p class="text-sm text-blue-500 font-semibold mb-4">${instruction}</p>
+                                ${questionText}
+                            </div>
+                            <div class="mt-8">
+                                <input id="answerInput" type="text" autocomplete="off" class="w-full px-4 py-3 border-2 rounded-lg text-lg text-center outline-none transition-colors ${state.test.isWrong ? 'border-red-400 bg-red-50' : 'border-gray-300 focus:border-blue-500'}" placeholder="정답 입력 후 엔터">
+                                ${state.test.isWrong ? `<p class="text-red-500 text-sm mt-2 font-medium">오답입니다. 다시 시도해보세요!</p>` : ''}
+                            </div>
+                            <button type="submit" class="w-full py-3 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 mt-4">확인</button>
+                        </form>
+                    `;
+                } else {
+                    // 정답 맞춘 상태
+                    const noteHtml = currentQ.note ? `<div class="border-t border-green-200 pt-3 mt-3"><p class="text-sm text-gray-600">💡 ${currentQ.note}</p></div>` : '';
+                    
+                    html += `
+                        <div class="space-y-6 animate-fade-in flex flex-col h-full">
+                            <div class="absolute top-0 left-0 w-full h-2 bg-green-500"></div>
+                            <h3 class="text-2xl font-bold text-green-600 mt-2 mb-4">🎉 정답입니다!</h3>
+                            
+                            <div class="bg-green-50 p-6 rounded-lg text-left flex-grow">
+                                <span class="text-3xl font-bold text-gray-900 cursor-pointer block mb-2" onclick="speak('${currentQ.word}')">${currentQ.word} 🔊</span>
+                                <p class="text-xl text-gray-800 font-medium mb-3">${currentQ.meanings.join(', ')}</p>
+                                ${noteHtml}
+                            </div>
+                            <button onclick="nextQuestion()" class="w-full py-3 bg-gray-800 text-white font-bold rounded-lg hover:bg-gray-900 mt-4 shadow-lg">
+                                ${state.test.currentIndex + 1 === totalQ ? '테스트 결과 보기' : '다음 문제'}
+                            </button>
+                        </div>
+                    `;
+                }
+                html += `</div></div>`;
+            }
+
+            // === 테스트 결과 화면 ===
+            if (state.viewState === 'testResult') {
+                const totalQ = state.test.questions.length;
+                const isPerfect = state.test.score === totalQ;
+                
+                html += `
+                    <div class="max-w-md mx-auto mt-10 text-center bg-white p-8 rounded-xl shadow-md border border-gray-100 animate-fade-in">
+                        <h2 class="text-3xl font-bold mb-2">테스트 완료!</h2>
+                        <p class="text-gray-500 mb-8">${state.selectedChapter.chapter}회 단어 테스트 결과</p>
+                        
+                        <div class="text-6xl font-black text-blue-600 mb-8">
+                            ${state.test.score} <span class="text-3xl text-gray-400 font-medium">/ ${totalQ}</span>
+                        </div>
+                        
+                        <p class="text-lg text-gray-700 mb-8">
+                            ${isPerfect ? '완벽합니다! 모든 단어를 외우셨네요! 👏' : '수고하셨습니다. 계속 복습해 보세요! 💪'}
+                        </p>
+                        <button onclick="goBackToMenu()" class="w-full py-4 bg-gray-200 text-gray-800 font-bold rounded-lg hover:bg-gray-300">
+                            나가기 (테스트 탭으로)
+                        </button>
+                    </div>
+                `;
+            }
+
+            html += `</div>`;
+            app.innerHTML = html;
+
+            // 렌더링 후 필요한 포커스 처리
+            if (state.viewState === 'testing' && !state.test.isAnswered) {
+                const input = document.getElementById('answerInput');
+                if (input) input.focus();
             }
         }
 
-        function completeTest() {
-            const chapterNum = currentState.selectedChapter.chapter;
-            const finalScore = currentState.test.correctCount;
-            
-            // 점수 저장
-            currentState.scores[chapterNum] = finalScore;
-            localStorage.setItem('vocab_scores', JSON.stringify(currentState.scores));
-            
-            currentState.view = 'result';
-            render();
-        }
-
-        function goBack() {
-            currentState.view = 'menu';
-            currentState.selectedChapter = null;
-            render();
-        }
-
-        // 초기 실행: 기존의 동기적 render() 대신 비동기 로딩 함수 호출
-        loadVocabData();
+        // 앱 시작
+        init();
 
     </script>
 </body>
